@@ -2,6 +2,7 @@ import numpy as np
 import os
 import torch
 
+from tqdm import tqdm
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
 from transformers import AlbertTokenizer, AlbertForSequenceClassification
@@ -58,39 +59,45 @@ def split_data(src_data, out_path, rate=0.2):
     out_data(texts_train, labels_train, os.path.join(out_path, 'train.csv'))
     out_data(texts_test, labels_test, os.path.join(out_path, 'test.csv'))
 
+
+def test_model(model, dataloader, data_size):
+    predicts, truth = np.array([], dtype='int8'), np.array([], dtype='int8')
+    with tqdm(range(test_num), desc='Test') as tbar:
+        for batch in dataloader:
+            outputs = model(batch['input_ids'].to(device), attention_mask=batch['attention_mask'].to(device))
+            predicts = np.append(predicts, np.argmax(outputs.logits.cpu().detach().numpy(), axis=1))
+            truth = np.append(truth, batch['labels'].numpy())
+            if predicts.shape[0] % 400 == 0:
+                tbar.update(400)
+    print(np.sum(predicts == truth)/data_size)
+    print(np.unique(predicts, return_counts=True))
+
 if __name__ == '__main__':
     #split_data('seq_type.txt', 'data')
-    texts_train, labels_train = get_data(os.path.join('data', 'train.csv'))
-    texts_test, labels_test = get_data(os.path.join('data', 'test.csv'))
+    texts_train, labels_train = get_data(os.path.join('data', 'sub_train.csv'))
+    texts_test, labels_test = get_data(os.path.join('data', 'sub_test.csv'))
+    device = torch.device('cuda:0')
 
     tokenizer = AlbertTokenizer.from_pretrained("textattack/albert-base-v2-imdb")
-    dataset = TextClassificationDataset(texts_train, labels_train, tokenizer)
-    dataloader = DataLoader(dataset, batch_size=4)
-    device = torch.device('cuda')
     model = AlbertForSequenceClassification.from_pretrained("textattack/albert-base-v2-imdb", num_labels=3, ignore_mismatched_sizes=True)
+    optimizer = AdamW(model.parameters(), lr=1e-5)
     model.to(device)
 
-    optimizer = AdamW(model.parameters(), lr=1e-5)
-    val_dataset = TextClassificationDataset(texts_test, labels_test, tokenizer)
-    val_dataloader = DataLoader(val_dataset, batch_size=8)
-    val_num = len(texts_test)
+    torch.cuda.empty_cache()
+    
+    dataset = TextClassificationDataset(texts_train, labels_train, tokenizer)
+    dataloader = DataLoader(dataset, batch_size=4)
+    train_num = len(texts_train)
+    test_dataset = TextClassificationDataset(texts_test, labels_test, tokenizer)
+    test_dataloader = DataLoader(test_dataset, batch_size=8)
+    test_num = len(texts_test)
 
-    """predicts, truth = np.array([], dtype='int8'), np.array([], dtype='int8')
-    for batch in val_dataloader:
-        input_ids = batch['input_ids']
-        attention_mask = batch['attention_mask']
-        labels = batch['labels']
-
-        outputs = model(batch['input_ids'], attention_mask=batch['attention_mask'])
-        predicts = np.append(predicts, np.argmax(outputs.logits.detach().numpy(), axis=1))
-        truth = np.append(truth, batch['labels'].numpy())
-    print(np.sum(predicts == truth)/val_num)
-    print(np.unique(predicts, return_counts=True))"""
+    test_model(model, test_dataloader, test_num)
 
     # 训练模型
-    model_path = 'albert'
+    model_path = 'model_save2'
     os.makedirs(model_path, exist_ok=True)
-    for epoch in range(10):
+    for epoch in range(5):
         for batch in dataloader:
             input_ids = batch['input_ids']
             attention_mask = batch['attention_mask']
@@ -102,19 +109,7 @@ if __name__ == '__main__':
 
             optimizer.step()
             optimizer.zero_grad()
-        
-        torch.save(model, os.path.join(model_path, f'epoch{epoch}.model'))
-        """predicts, truth = np.array([], dtype='int8'), np.array([], dtype='int8')
-        for batch in val_dataloader:
-            input_ids = batch['input_ids']
-            attention_mask = batch['attention_mask']
-            labels = batch['labels']
-
-            outputs = model(batch['input_ids'], attention_mask=batch['attention_mask'])
-            predicts = np.append(predicts, np.argmax(outputs.logits.detach().numpy(), axis=1))
-            truth = np.append(truth, batch['labels'].numpy())
-        print(np.sum(predicts == truth)/val_num)
-        print(np.unique(predicts, return_counts=True))"""
-
         print(f'Epoch {epoch + 1} completed')
-# 假设texts和labels分别是文本和标签的列表
+        torch.save(model, os.path.join(model_path, f'epoch{epoch}.model'))
+        test_model(model, test_dataloader, test_num)
+

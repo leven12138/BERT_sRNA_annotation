@@ -42,6 +42,18 @@ def get_data(txt_path):
                 labels.append(2)
     return texts, labels
 
+def test_model(model, dataloader, data_size):
+    predicts, truth = np.array([], dtype='int8'), np.array([], dtype='int8')
+    with tqdm(range(test_num), desc='Test') as tbar:
+        for batch in dataloader:
+            outputs = model(batch['input_ids'].to(device), attention_mask=batch['attention_mask'].to(device))
+            predicts = np.append(predicts, np.argmax(outputs.logits.cpu().detach().numpy(), axis=1))
+            truth = np.append(truth, batch['labels'].numpy())
+            if predicts.shape[0] % 400 == 0:
+                tbar.update(400)
+    print(np.sum(predicts == truth)/data_size)
+    print(np.unique(predicts, return_counts=True))
+
 if __name__ == '__main__':
     #split_data('seq_type.txt', 'data')
     texts_train, labels_train = get_data(os.path.join('data', 'sub_train.csv'))
@@ -62,18 +74,9 @@ if __name__ == '__main__':
     test_dataloader = DataLoader(test_dataset, batch_size=8)
     test_num = len(texts_test)
 
-    predicts, truth = np.array([], dtype='int8'), np.array([], dtype='int8')
-    with tqdm(range(test_num), desc='Test') as tbar:
-        for batch in test_dataloader:
-            outputs = model(batch['input_ids'].to(device), attention_mask=batch['attention_mask'].to(device))
-            predicts = np.append(predicts, np.argmax(outputs.logits.cpu().detach().numpy(), axis=1))
-            truth = np.append(truth, batch['labels'].numpy())
-            if predicts.shape[0] % 800 == 0:
-                tbar.update(800)
-    print(np.sum(predicts == truth)/test_num)
-    print(np.unique(predicts, return_counts=True))
+    test_model(model, test_dataloader, test_num)
     # 训练模型
-    model_path = 'run1'
+    model_path = 'model_save1'
     os.makedirs(model_path, exist_ok=True)
     for epoch in range(5):
         for batch in dataloader:
@@ -89,15 +92,5 @@ if __name__ == '__main__':
             optimizer.zero_grad()
         print(f'Epoch {epoch + 1} completed')
         torch.save(model, os.path.join(model_path, f'epoch{epoch}.model'))
-
-        predicts, truth = np.array([], dtype='int8'), np.array([], dtype='int8')
-        with tqdm(range(test_num), desc='Test') as tbar:
-            for batch in test_dataloader:
-                outputs = model(batch['input_ids'].to(device), attention_mask=batch['attention_mask'].to(device))
-                predicts = np.append(predicts, np.argmax(outputs.logits.cpu().detach().numpy(), axis=1))
-                truth = np.append(truth, batch['labels'].numpy())
-                if predicts.shape[0] % 800 == 0:
-                    tbar.update(800)
-        print(np.sum(predicts == truth)/test_num)
-        print(np.unique(predicts, return_counts=True))
+        test_model(model, test_dataloader, test_num)
 
