@@ -61,7 +61,7 @@ if __name__ == '__main__':
     train_num = len(texts_train)
 
     # 训练模型
-    model_path = 'model_save1'
+    model_path = 'model_save3'
     os.makedirs(model_path, exist_ok=True)
     epochs = 5
     for epoch in range(epochs):
@@ -78,12 +78,10 @@ if __name__ == '__main__':
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
-
             mlm_acc, _, _ = accuracy(mlm_logits, masked_lm_labels, mlm_tokenizer.PAD_IDX)
-            exit()
-            if idx % 80 == 0:
+            torch.cuda.empty_cache()
+            if (idx+1) % 200 == 0:
                 print(f"Epoch: [{epoch + 1}/{epochs}], Batch[{idx}/{len(dataloader)}], "
                       f"Train loss :{loss.item():.3f}, Train mlm acc: {mlm_acc:.3f}")
         print(f'Epoch {epoch + 1} completed')
-        exit()
-        #torch.save(model, os.path.join(model_path, f'epoch{epoch}.model'))
+        torch.save(myMLMbert, os.path.join(model_path, f'epoch{epoch}.model'))
