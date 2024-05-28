@@ -36,6 +36,7 @@ def get_data(txt_path):
     return texts
 
 def accuracy(mlm_logits, mlm_labels, PAD_IDX):
+    assert mlm_logits.shape[1]==512
     mlm_pred = mlm_logits.argmax(axis=2).reshape(-1)
     mlm_true = mlm_labels.reshape(-1)
     mlm_acc = mlm_pred.eq(mlm_true)  # 计算预测值与正确值比较的情况，得到预测正确的个数（此时还包括有mask位置）
@@ -47,8 +48,8 @@ def accuracy(mlm_logits, mlm_labels, PAD_IDX):
     return mlm_acc, mlm_correct, mlm_total
 
 if __name__ == '__main__': 
-    myMLMbert = BertForMaskedLM("/home/ubuntu/pure_attention/model/config.json")
-    mlm_tokenizer = MLMTokenizer("/home/ubuntu/pure_attention/model/vocab.txt")
+    myMLMbert = BertForMaskedLM("module/config.json")
+    mlm_tokenizer = MLMTokenizer("module/vocab.txt")
     device = torch.device('cuda:0')
     
     myMLMbert.to(device)
@@ -64,6 +65,7 @@ if __name__ == '__main__':
     model_path = 'model_save3'
     os.makedirs(model_path, exist_ok=True)
     epochs = 5
+    acc = []
     for epoch in range(epochs):
         for idx, batch in enumerate(dataloader):
             input_ids = batch['input_ids'].to(device)
@@ -79,9 +81,11 @@ if __name__ == '__main__':
             optimizer.step()
             optimizer.zero_grad()
             mlm_acc, _, _ = accuracy(mlm_logits, masked_lm_labels, mlm_tokenizer.PAD_IDX)
+            acc.append(mlm_acc)
+            exit()
             torch.cuda.empty_cache()
-            if (idx+1) % 200 == 0:
-                print(f"Epoch: [{epoch + 1}/{epochs}], Batch[{idx}/{len(dataloader)}], "
-                      f"Train loss :{loss.item():.3f}, Train mlm acc: {mlm_acc:.3f}")
+            if (idx+1) % 50 == 0:
+                print(f"Epoch: [{epoch + 1}/{epochs}], Batch: [{idx+1}/{len(dataloader)}], "
+                      f"Train loss: {loss.item():.3f}, Train mlm acc: {mlm_acc:.3f}")
         print(f'Epoch {epoch + 1} completed')
         torch.save(myMLMbert, os.path.join(model_path, f'epoch{epoch}.model'))

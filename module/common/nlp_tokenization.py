@@ -209,7 +209,10 @@ class MLMTokenizer(Tokenizer):
                 if random.random() < self.masked_token_unchanged_rate:  # 0.5 # 10%的时间：保持词不变
                     masked_token_id = token_ids[mlm_pred_position]    
                 else:# 10%的时间：用随机词替换该词
-                    masked_token_id = random.randint(0, self.vocab_size)
+                    while True:
+                        masked_token_id = random.randint(0, self.vocab_size-1)
+                        if not masked_token_id in [self.CLS_IDX, self.SEP_IDX, self.MASK_IDX, self.PAD_IDX]:
+                            break
             mlm_input_tokens_id[mlm_pred_position] = masked_token_id
             pred_positions.append(mlm_pred_position)  # 保留被mask位置的索引信息
         mlm_label = [self.PAD_IDX if idx not in pred_positions
